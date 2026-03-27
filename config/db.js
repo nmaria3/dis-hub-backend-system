@@ -1,7 +1,9 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-const pool = mysql.createPool(process.env.AIVEN_SERVICE_URI);
+const pool = mysql.createPool({
+  uri: process.env.AIVEN_SERVICE_URL
+});
 
 (async () => {
   try {
