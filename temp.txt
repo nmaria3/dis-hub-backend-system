@@ -1,0 +1,32 @@
+Campuses
+Nkzoi
+Lubaga
+Masaka
+Mbale
+Ngetta
+Fort Portal
+
+Faculties
+Science
+Agriculture
+Law
+Education
+Business Administration and Management
+
+Courses under Agriculture
+Bachelor of Agriculture
+
+Courses under Science
+Bachelor of Science in Computer Science
+Bachelor of Science in Information Technology
+
+
+Courses under Business Administration and Management
+Bachelor of Accounting and Finance
+
+Courses under Law
+Bachelor of Laws 
+
+Courses under Education
+Bachelor of Science with Education
+Bachelor of Arts with Education
