@@ -8,6 +8,7 @@ const loggerMiddleware = require('./middleware/logger.middleware');
 
 // Routes
 const authRoutes = require("./routes/auth.routes");
+const adminRoutes = require("./routes/admin.routes");
 
 
 // Middleware
@@ -36,6 +37,8 @@ app.get('/api', (req, res) => {
 });
 
 app.use("/auth", authRoutes);
+
+app.use("/admin", adminRoutes);
 
 app.post("/delete-user", requireAuth(), async (req, res) => {
   try {
