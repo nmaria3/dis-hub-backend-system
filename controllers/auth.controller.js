@@ -17,10 +17,14 @@ const signUp = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized email" });
     }
 
+    console.log("Detected Role:", role);
+
     const [results] = await db.query(
       "SELECT * FROM users WHERE clerkid = ?",
       [clerkId]
     );
+
+    console.log("Results from Sign Up endpoint:", results);
 
     // =========================
     // USER EXISTS
@@ -172,10 +176,15 @@ const signIn = async (req, res) => {
 // controllers/auth.controller.js
 const checkProfile = async (req, res) => {
   try {
-    const { clerkId } = req.body;
+    const { clerkId, page } = req.body;
+    const path = req.path;
 
     if (!clerkId) {
       return res.status(400).json({ message: "clerkId is required" });
+    }
+
+    if (page === "/complete-profile") {
+      return res.status(400).json({ message: "Extra Request has been denied" });
     }
 
     const [results] = await db.query(
@@ -183,10 +192,13 @@ const checkProfile = async (req, res) => {
       [clerkId]
     );
 
+    console.log(clerkId)
+    console.log("CHECK PROFILE RESULTS:", results);
+
     if (results.length === 0) {
       return res.status(404).json({
         message: "User not found",
-        redirect: "/sign-up",
+        redirect: "/complete-profile",
       });
     }
 
