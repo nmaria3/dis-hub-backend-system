@@ -62,7 +62,7 @@ CREATE TABLE dissertations (
     author_name VARCHAR(255),
     abstract TEXT,
     year INT,
-    degree_type VARCHAR(100),
+    methodology VARCHAR(255),
     supervisor VARCHAR(255),
     pages INT,
     file_size VARCHAR(50),
