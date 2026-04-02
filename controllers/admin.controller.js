@@ -1,5 +1,10 @@
 const db = require("../config/db");
 const dotenv = require("dotenv").config();
+const { generateCitations } = require("../utils/CitationsGenerator");
+const { formatFileSize } = require("../utils/FileSizeFormatter");
+const { getDownloadUrl } = require("../utils/CloudinaryHelper");
+const { saveDissertation } = require("../utils/SaveDissertation");
+const generateFileHash = require("../utils/GenerateFileHash");
 
 const getImages = async (req, res) => {
   try {
@@ -83,10 +88,14 @@ const uploadDissertation = async (req, res) => {
 
     const clerkId = req.auth().userId;
 
-        // =========================
+    // =========================
     // 🧾 LOG DATA
     // =========================
-    console.log("📦 BODY:", req.body);
+    // console.log("📦 BODY:", req.body);
+
+    // Set current year if not provided
+    const currentYear = new Date().getFullYear();
+
 
     const {
       title,
@@ -137,6 +146,33 @@ const uploadDissertation = async (req, res) => {
 
     const file = req.file;
 
+    // 📂 FILE BUFFER
+    const fileBuffer = req.file.buffer;
+
+    // console.log("📂 FILE INFO:");
+    // console.log("Name:", file.originalname);
+    // console.log("Size:", file.size);
+    // console.log("MIME Type:", file.mimetype);
+    // console.log("Buffer:", fileBuffer); // Debug report
+    //
+
+    // 🔑 Generate hash
+    const fileHash = generateFileHash(fileBuffer);
+
+    // console.log("Generated File Hash:", fileHash); // Debug report
+
+    // 🔍 Check DB BEFORE upload
+    const [existing] = await db.query(
+      "SELECT id FROM dissertations WHERE file_hash = ?",
+      [fileHash]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({
+        message: "❌ Duplicate file detected. This dissertation already exists.",
+      });
+    }
+
     // 🔐 CHECK USER
     const [users] = await db.query(
       "SELECT * FROM users WHERE clerkid = ?",
@@ -149,19 +185,19 @@ const uploadDissertation = async (req, res) => {
 
     const user = users[0];
 
+    // Get Admin Id
+    const adminId = user.id;
+
     if (user.role !== "admin") {
       return res.status(403).json({ message: "Admins only" });
     }
 
-    // ❌ IF NO FILE
+    // IF NO FILE
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
     }
-
-    console.log("📂 FILE RECEIVED:", req.file.originalname);
-
     
-    // ✅ Extract clean file name (without extension)
+    // Extract clean file name (without extension)
     const fileName = path.parse(file.originalname).name;
 
     // =========================
@@ -189,11 +225,55 @@ const uploadDissertation = async (req, res) => {
 
     const result = await uploadToCloudinary();
 
-    console.log("☁️ Cloudinary Upload Result:", result.secure_url);
+    const number_of_pages = result.pages || pages; // fallback to user input if Cloudinary doesn't return pages
+
+    const cloudinary_url = result.secure_url;
+
+    // Get download URL with proper attachment flag
+    const download = getDownloadUrl(cloudinary_url, fileName);
+
+    const fileSize = formatFileSize(req.file.size);
+
+   const citations = generateCitations({
+      title,
+      author,
+      year: new Date().getFullYear(),
+      platform: "Dis-Hub",
+      institution: "Uganda Martyrs University",
+      dissertation_url: cloudinary_url,
+    });
+
+    const getResult = await saveDissertation({
+      title,
+      author,
+      abstract,
+      methodology,
+      supervisor,
+      pages: number_of_pages,
+      fileSize,
+      fileUrl: cloudinary_url,
+      downloadUrl: download,
+      imageUrl: image_url,
+      license,
+      citations: citations.formatted,
+      courseId: course,
+      uploadedBy: adminId,
+      facultyId: faculty,
+      campusId: campus,
+      year: currentYear,
+      fileHash,
+    });
+
+    if (!getResult) {
+      return res.status(500).json({
+        message: "Failed to save dissertation to database",
+      });
+    }
 
     return res.json({
-      message: "Upload successful",
-      file_url: result.secure_url,
+      message: "Dissertation uploaded successfully",
+      file_url: cloudinary_url,
+      finalResult: getResult,
     });
 
   } catch (err) {
@@ -201,7 +281,6 @@ const uploadDissertation = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
 
 const fs = require("fs");
 const {PDFParse} = require('pdf-parse');

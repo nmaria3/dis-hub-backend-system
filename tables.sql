@@ -67,8 +67,21 @@ CREATE TABLE dissertations (
     pages INT,
     file_size VARCHAR(50),
     file_url TEXT,
+    file_download_url TEXT,
+    image_url TEXT,
+    license TEXT,
+    citations TEXT,
     courses_id INT,
     uploaded_by INT,
+    faculty_id INT,
+    campus_id INT,
+    file_hash VARCHAR(255),
+    FOREIGN KEY (faculty_id) REFERENCES faculties(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    FOREIGN KEY (campus_id) REFERENCES campuses(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
     FOREIGN KEY (courses_id) REFERENCES courses(id)
         ON DELETE CASCADE
         ON UPDATE CASCADE,
