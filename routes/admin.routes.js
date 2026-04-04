@@ -3,9 +3,9 @@ const router = express.Router();
 const { requireAuth } = require("@clerk/express");
 const { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations} = require("../controllers/admin.controller");
 const { getUploadStatus } = require("../controllers/admin.controller")
+const { getAllDissertations, deleteDissertation, getDissertationById, updateDissertation } = require("../controllers/dissertations.controller");
 
 const multer = require("multer");
-const path = require("path");
 
 // 📁 Storage config
 const storage = multer.diskStorage({
@@ -26,8 +26,12 @@ const upload = multer({ storage });
 // 🔒 Protected route
 router.get("/get-images", requireAuth(), getImages);
 
+const storage_upload = multer.memoryStorage();
+
+const upload_dissertation = multer({ storage_upload });
+
 // 🔒 Protected route
-router.post("/upload-dissertation", requireAuth(), upload.single("file"), uploadDissertation);
+router.post("/upload-dissertation", requireAuth(), upload_dissertation.single("file"), uploadDissertation);
 
 router.post("/multiple-upload",  requireAuth(),  upload.array("files", 20),  multipleUploadHandler); // 🔥 up to 20 PDFs
 
@@ -40,5 +44,14 @@ router.delete("/uploads/:filename", requireAuth(), deleteFile);
 router.post("/publish", requireAuth(), publishDissertations);
 
 router.get("/upload-status", requireAuth(), getUploadStatus);
+
+router.get("/get-dissertations", requireAuth(), getAllDissertations);
+
+// DELETE dissertations.
+router.delete("/delete-dissertation/:id", requireAuth(), deleteDissertation);
+
+router.get("/dissertations/:id", requireAuth(), getDissertationById);
+
+router.put("/dissertations/:id", updateDissertation);
 
 module.exports = router;

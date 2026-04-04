@@ -4,4 +4,4 @@ function generateFileHash(buffer) {
   return crypto.createHash("md5").update(buffer).digest("hex");
 }
 
-module.exports = generateFileHash;
+module.exports = { generateFileHash };

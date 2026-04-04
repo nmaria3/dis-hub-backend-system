@@ -4,7 +4,7 @@ const { generateCitations } = require("../utils/CitationsGenerator");
 const { formatFileSize } = require("../utils/FileSizeFormatter");
 const { getDownloadUrl } = require("../utils/CloudinaryHelper");
 const { saveDissertation } = require("../utils/SaveDissertation");
-const generateFileHash = require("../utils/GenerateFileHash");
+const { generateFileHash}  = require("../utils/GenerateFileHash");
 const { setStatus } = require("../utils/StatusManager");
 const { processSinglePDF } = require("../utils/PDFExtractor");
 const { getAdminAndRandomImage } = require("../utils/GetAdminAndImage");
@@ -12,6 +12,7 @@ const { generateLicense } = require("../utils/LicenseGenerator");
 const { getStatus } = require("../utils/StatusScore");
 const { getAllLookups } = require("../utils/dbLookUps");
 const { matchIds } = require("../utils/matchIds");
+const { clearUploadsFolder } = require("../utils/ClearUploadsFolder");
 const cloudinary = require("cloudinary").v2;
 
 cloudinary.config({
@@ -153,6 +154,7 @@ const uploadDissertation = async (req, res) => {
     }
 
     const file = req.file;
+    // console.log("File Data:", file)
 
     const fileSize = formatFileSize(req.file.size);
 
@@ -235,6 +237,9 @@ const uploadDissertation = async (req, res) => {
 
     const result = await uploadToCloudinary();
 
+    // console.log(result);
+    // console.log(`Public Id: ${result.public_id}`);
+
     const number_of_pages = result.pages || pages; // fallback to user input if Cloudinary doesn't return pages
 
     const cloudinary_url = result.secure_url;
@@ -270,6 +275,7 @@ const uploadDissertation = async (req, res) => {
       campusId: campus,
       year: currentYear,
       fileHash,
+      public_id: result.public_id
     });
 
     if (!getResult) {
@@ -277,6 +283,9 @@ const uploadDissertation = async (req, res) => {
         message: "Failed to save dissertation to database",
       });
     }
+
+    // Clear up all files in the uploads folder
+    clearUploadsFolder();
 
     return res.json({
       message: "Dissertation uploaded successfully",
@@ -432,7 +441,7 @@ const processUploads = async () => {
         // =========================
         const fileBuffer = fs.readFileSync(filePath);
 
-                  // 🔑 Generate hash
+        // 🔑 Generate hash
         const fileHash = generateFileHash(fileBuffer);
 
         // console.log("Generated File Hash:", fileHash); // Debug report
@@ -544,6 +553,7 @@ const processUploads = async () => {
           campusId: ids.campus_id,
           year: thisYear,
           fileHash: fileHash,
+          public_id: cloudinaryResult.public_id
         });
 
           // console.log("\n💾 Save Result:");
@@ -585,6 +595,8 @@ const processUploads = async () => {
     });
 
     console.log("✅ Upload process complete");
+
+    clearUploadsFolder();
 
   } catch (error) {
     console.error("❌ Processing error:", error);

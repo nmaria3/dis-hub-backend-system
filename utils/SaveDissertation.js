@@ -18,6 +18,7 @@ async function saveDissertation({
   campusId,
   uploadedBy,
   fileHash,
+  public_id
 }) {
   try {
     const year = new Date().getFullYear();
@@ -41,8 +42,9 @@ async function saveDissertation({
         uploaded_by,
         faculty_id,
         campus_id,
-        file_hash
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        file_hash,
+        public_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
@@ -64,6 +66,7 @@ async function saveDissertation({
       facultyId,
       campusId,
       fileHash,
+      public_id
     ];
 
     const [result] = await db.query(query, values);
