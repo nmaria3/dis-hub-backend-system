@@ -13,6 +13,7 @@ const { getStatus } = require("../utils/StatusScore");
 const { getAllLookups } = require("../utils/dbLookUps");
 const { matchIds } = require("../utils/matchIds");
 const { clearUploadsFolder } = require("../utils/ClearUploadsFolder");
+const { clerkClient } = require("@clerk/express");
 const cloudinary = require("cloudinary").v2;
 
 cloudinary.config({
@@ -686,4 +687,136 @@ const getUploadStatus = (req, res) => {
   }
 };
 
-module.exports = { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getUploadStatus  };
+const getStudentActivity = async (req, res) => {
+  try {
+    // 1. Get DB data
+    const [users] = await db.query(`
+      SELECT 
+        u.id,
+        u.clerkid,
+        u.role,
+        u.phone_number,
+
+        c.name AS campus_name,
+        f.name AS faculty_name,
+        co.name AS course_name,
+
+        CONVERT_TZ(a.last_seen, '+00:00', '+03:00') AS last_seen_eat,
+
+        CASE
+          WHEN a.last_seen >= NOW() - INTERVAL 2 MINUTE THEN 'online'
+          ELSE 'offline'
+        END AS status
+
+      FROM users u
+      LEFT JOIN activity a ON u.id = a.user_id
+      LEFT JOIN campuses c ON u.campus_id = c.id
+      LEFT JOIN courses co ON u.course_id = co.id
+      LEFT JOIN faculties f ON co.faculty_id = f.id
+    `);
+
+    // 2. Filter out admins BEFORE enriching
+    const studentUsers = users.filter(user => user.role !== "admin");
+
+    // 3. Fetch Clerk data for each user
+    const enrichedUsers = await Promise.all(
+      studentUsers.map(async (user) => {
+        try {
+          const clerkUser = await clerkClient.users.getUser(user.clerkid);
+
+          return {
+            ...user,
+            // Clerk data
+            full_name: `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`,
+            image_url: clerkUser.imageUrl,
+            email: clerkUser.emailAddresses[0]?.emailAddress,
+            clerk_created_at: clerkUser.createdAt,
+            last_sign_in_at: clerkUser.lastSignInAt,
+          };
+        } catch (err) {
+          // If Clerk fails, still return DB data
+          return {
+            ...user,
+            full_name: null,
+            image_url: null,
+            email: null,
+            clerk_created_at: null,
+            last_sign_in_at: null,
+          };
+        }
+      })
+    );
+
+    res.json({
+      success: true,
+      count: enrichedUsers.length,
+      data: enrichedUsers,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const deleteUser = async (req, res) => {
+  try {
+    const { id, clerkId } = req.body;
+
+    console.log("🧨 Delete request:", { id, clerkId });
+
+    // =========================
+    // 🔐 VERIFY ADMIN
+    // =========================
+    const auth = req.auth();
+    const adminClerkId = auth.userId;
+
+    const [admin] = await db.query(
+      "SELECT * FROM users WHERE clerkid = ?",
+      [adminClerkId]
+    );
+
+    if (admin.length === 0 || admin[0].role !== "admin") {
+      return res.status(403).json({ message: "Admins only" });
+    }
+
+    // =========================
+    // ❗ PREVENT SELF DELETE
+    // =========================
+    if (adminClerkId === clerkId) {
+      return res.status(400).json({
+        message: "You cannot delete yourself",
+      });
+    }
+
+    // =========================
+    // 🧠 DELETE FROM CLERK
+    // =========================
+    await clerkClient.users.deleteUser(clerkId);
+
+    console.log("✅ Deleted from Clerk");
+
+    // =========================
+    // 🗄 DELETE FROM DATABASE
+    // =========================
+    await db.query("DELETE FROM users WHERE id = ?", [id]);
+
+    console.log("✅ Deleted from DB");
+
+    return res.json({
+      success: true,
+      message: "Student deleted successfully",
+    });
+
+  } catch (err) {
+    console.error("❌ DELETE ERROR:", err);
+
+    return res.status(500).json({
+      message: "Failed to delete user",
+    });
+  }
+};
+
+module.exports = { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getUploadStatus, getStudentActivity, deleteUser };

@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { requireAuth } = require("@clerk/express");
-const { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations} = require("../controllers/admin.controller");
+const { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getStudentActivity, deleteUser} = require("../controllers/admin.controller");
 const { getUploadStatus } = require("../controllers/admin.controller")
 const { getAllDissertations, deleteDissertation, getDissertationById, updateDissertation } = require("../controllers/dissertations.controller");
 
@@ -52,6 +52,10 @@ router.delete("/delete-dissertation/:id", requireAuth(), deleteDissertation);
 
 router.get("/dissertations/:id", requireAuth(), getDissertationById);
 
-router.put("/dissertations/:id", updateDissertation);
+router.put("/dissertations/:id", requireAuth(), updateDissertation);
+
+router.get("/get-student/activity", requireAuth(),  getStudentActivity);
+
+router.delete("/delete-user", requireAuth(), deleteUser);
 
 module.exports = router;
