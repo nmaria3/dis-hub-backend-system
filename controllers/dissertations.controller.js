@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { createNotification } = require("../utils/notification");
 
 // ===============================
 // 📚 GET ALL DISSERTATIONS (FULL DATA)
@@ -183,6 +184,12 @@ const deleteDissertation = async (req, res) => {
       [id]
     );
 
+    await createNotification("dissertation", {
+      action: "deleted",
+      title: dissertation.title,
+      author: dissertation.author_name,
+    });
+
     // =========================
     // ✅ SUCCESS RESPONSE
     // =========================
@@ -193,6 +200,10 @@ const deleteDissertation = async (req, res) => {
 
   } catch (err) {
     console.error("❌ DELETE ERROR:", err);
+    await createNotification("system", {
+      action: "danger",
+      message: `Failed to Delete Dissertation`
+    });
     return res.status(500).json({
       message: "Server error while deleting dissertation",
     });
@@ -258,22 +269,22 @@ const getDissertationById = async (req, res) => {
 };
 
 const updateDissertation = async (req, res) => {
-  try {
-    const { id } = req.params;
+  const { id } = req.params;
 
-    const {
-      title,
-      author_name,
-      abstract,
-      methodology,
-      supervisor,
-      image_url,
-      license,
-      citations,
-      campus_id,
-      faculty_id,
-      course_id,
-    } = req.body;
+  const {
+    title,
+    author_name,
+    abstract,
+    methodology,
+    supervisor,
+    image_url,
+    license,
+    citations,
+    campus_id,
+    faculty_id,
+    course_id,
+  } = req.body;
+  try {
 
     // =========================
     // 🔍 VALIDATION
@@ -343,6 +354,12 @@ const updateDissertation = async (req, res) => {
       ]
     );
 
+    await createNotification("dissertation", {
+      action: "updated",
+      title: title,
+      author: author_name,
+    });
+
     return res.json({
       message: "✅ Dissertation updated successfully",
       id,
@@ -350,6 +367,10 @@ const updateDissertation = async (req, res) => {
 
   } catch (err) {
     console.error("❌ UPDATE ERROR:", err);
+    await createNotification("system", {
+      action: "danger",
+      message: `Failed to Update Dissertation ${title} by ${author_name}`
+    });
     res.status(500).json({
       message: "Server error while updating",
     });

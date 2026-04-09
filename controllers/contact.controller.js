@@ -30,10 +30,18 @@ const sendContactEmail = async (req, res) => {
       `,
     });
 
+    await createNotification("system", {
+      action: "success",
+      message: `You have recieved an email from ${full_name} : ${email}.`
+    });
     res.json({ success: true, message: "✅ Email sent Successfully" });
-
+    
   } catch (err) {
     console.error(err);
+    await createNotification("system", {
+      action: "danger",
+      message: `Failed to send Email Address!!!`
+    });
     res.status(500).json({ success: false, message: "❌ Failed to send email" });
   }
 };

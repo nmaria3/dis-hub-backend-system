@@ -1,4 +1,6 @@
 const db = require("../config/db");
+const { clerkClient } = require("@clerk/express");
+const { createNotification } = require("../utils/notification");
 
 const completeProfile = async (req, res) => {
   try {
@@ -25,6 +27,14 @@ const completeProfile = async (req, res) => {
         message: "All fields are required",
       });
     }
+
+    const student = await clerkClient.users.getUser(clerkId);
+
+    const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+
+    const email = student.emailAddresses.find(
+      (email) => email.id === student.primaryEmailAddressId
+    )?.emailAddress;
 
     // 🔍 Check user exists
     const [users] = await db.query(
@@ -63,6 +73,11 @@ const completeProfile = async (req, res) => {
 
     console.log("✅ Profile updated");
 
+    await createNotification("system", {
+      action: "success",
+      message: `Profile was completed successfully by ${fullName} : ${email}.`
+    });
+
     return res.status(200).json({
       message: "Profile completed successfully",
       role: user.role,
@@ -72,6 +87,10 @@ const completeProfile = async (req, res) => {
 
   } catch (error) {
     console.error("❌ COMPLETE PROFILE ERROR:", error);
+    await createNotification("system", {
+      action: "danger",
+      message: `Student has failed to complete profile. ID : ${req.body.clerkId}!!!`
+    });
     return res.status(500).json({
       message: "Server error while completing profile",
     });

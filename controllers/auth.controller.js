@@ -1,5 +1,7 @@
 // controllers/auth.controller.js
 const db = require("../config/db");
+const { clerkClient } = require("@clerk/express");
+const { createNotification } = require("../utils/notification");
 
 const signUp = async (req, res) => {
   try {
@@ -19,6 +21,14 @@ const signUp = async (req, res) => {
 
     console.log("Detected Role:", role);
 
+    const clerkUser = await clerkClient.users.getUser(clerkId);
+
+    const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim();
+
+    const clerkEmail = clerkUser.emailAddresses.find(
+      (email) => email.id === clerkUser.primaryEmailAddressId
+    )?.emailAddress;
+
     const [results] = await db.query(
       "SELECT * FROM users WHERE clerkid = ?",
       [clerkId]
@@ -37,21 +47,34 @@ const signUp = async (req, res) => {
 
       // 🔥 ADMIN
       if (role === "admin") {
+        await createNotification("user", {
+          action: "registered",
+          full_name: fullName,
+          email: clerkEmail
+        });
         return res.status(200).json({
           message: "Admin already registered",
           redirect: "/admin/dashboard",
         });
       }
-
       console.log("Is Profile Complete?", isProfileComplete);
       // 🔥 STUDENT
       if (role === "student") {
         if (isProfileComplete) {
+          await createNotification("user", {
+            action: "registered",
+            full_name: fullName,
+            email: clerkEmail
+          });
           return res.status(200).json({
             message: "Profile complete",
             redirect: "/students/dashboard",
           });
         } else {
+          await createNotification("system", {
+            action: "warning",
+            message: `Incomplete Profile for student with ID: ${req.body.clerkId} and Email: ${req.body.email} !!!`
+          });
           return res.status(200).json({
             message: "Complete your profile",
             redirect: "/complete-profile",
@@ -97,6 +120,14 @@ const signIn = async (req, res) => {
       });
     }
 
+    const clerkUser = await clerkClient.users.getUser(clerkId);
+
+    const fullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim();
+
+    const clerkEmail = clerkUser.emailAddresses.find(
+      (email) => email.id === clerkUser.primaryEmailAddressId
+    )?.emailAddress;
+
     // 🔐 Detect role
     let role;
 
@@ -114,6 +145,11 @@ const signIn = async (req, res) => {
     // 🟣 ADMIN FLOW
     // ======================
     if (role === "admin") {
+      await createNotification("user", {
+        action: "signed-in",
+        full_name: fullName,
+        email: clerkEmail
+      });
       return res.status(200).json({
         message: "Admin login successful",
         role,
@@ -157,6 +193,12 @@ const signIn = async (req, res) => {
       });
     }
 
+    await createNotification("user", {
+      action: "signed-in",
+      full_name: fullName,
+      email: clerkEmail
+    });
+
     // 🟢 If profile is complete
     return res.status(200).json({
       message: "Login successful",
@@ -167,6 +209,10 @@ const signIn = async (req, res) => {
 
   } catch (error) {
     console.error("❌ SIGN-IN ERROR:", error);
+    await createNotification("system", {
+      action: "danger",
+      message: `Failed to sign-in user with ID: ${req.body.clerkId}`
+    });
     return res.status(500).json({
       message: "Server error during sign-in",
     });

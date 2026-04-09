@@ -1,5 +1,7 @@
 const db = require("../config/db");
-const dotenv = require("dotenv").config();
+const dotenv = require("dotenv");
+dotenv.config();
+const { createNotification } = require("../utils/notification");
 const { generateCitations } = require("../utils/CitationsGenerator");
 const { formatFileSize } = require("../utils/FileSizeFormatter");
 const { getDownloadUrl } = require("../utils/CloudinaryHelper");
@@ -288,6 +290,12 @@ const uploadDissertation = async (req, res) => {
     // Clear up all files in the uploads folder
     clearUploadsFolder();
 
+    await createNotification("dissertation", {
+      action: "created",
+      title: req.body.title,
+      author: req.body.author,
+    });
+
     return res.json({
       message: "Dissertation uploaded successfully",
       file_url: cloudinary_url,
@@ -296,6 +304,10 @@ const uploadDissertation = async (req, res) => {
 
   } catch (err) {
     console.error("❌ ERROR:", err);
+        await createNotification("system", {
+      action: "danger",
+      message: `Failed to Add Dissertation ${req.body.title} by ${req.body.author}!!!`
+    });
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -384,7 +396,6 @@ const deleteFile = (req, res) => {
     res.status(500).json({ message: "Delete failed" });
   }
 };
-
 
 // 🔥 Get all campuses
 const getCampusesFromDB = async () => {
@@ -562,6 +573,11 @@ const processUploads = async () => {
 
         if(saveResult.success) 
         {
+          await createNotification("dissertation", {
+            action: "created",
+            title: finalObject.title,
+            author: finalObject.author_name,
+          });
           console.log(" ✅ File has been saved to the database Successfully.")
         }
         else
@@ -608,6 +624,11 @@ const processUploads = async () => {
       totalFiles: 0,
       processedFiles: 0,
       message: "Something went wrong",
+    });
+
+    await createNotification("system", {
+      action: "danger",
+      message: `Failed to Create Dissertations!!!`
     });
   }
 };
@@ -791,6 +812,14 @@ const deleteUser = async (req, res) => {
       });
     }
 
+    const user = await clerkClient.users.getUser(clerkId);
+
+    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+
+    const email = user.emailAddresses.find(
+      (email) => email.id === user.primaryEmailAddressId
+    )?.emailAddress;
+
     // =========================
     // 🧠 DELETE FROM CLERK
     // =========================
@@ -805,6 +834,12 @@ const deleteUser = async (req, res) => {
 
     console.log("✅ Deleted from DB");
 
+    await createNotification("user", {
+      action: "deleted",
+      full_name: fullName,
+      email: email
+    });
+
     return res.json({
       success: true,
       message: "Student deleted successfully",
@@ -813,10 +848,94 @@ const deleteUser = async (req, res) => {
   } catch (err) {
     console.error("❌ DELETE ERROR:", err);
 
+    await createNotification("system", {
+      action: "danger",
+      message: `Failed to Delete Student!!!`
+    });
+
     return res.status(500).json({
       message: "Failed to delete user",
     });
   }
 };
 
-module.exports = { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getUploadStatus, getStudentActivity, deleteUser };
+const safeJSONParse = (data) => {
+  try {
+    if (typeof data === "string") {
+      return JSON.parse(data);
+    }
+    return data; // already object
+  } catch (err) {
+    console.error("JSON parse error:", err);
+    return null;
+  }
+};
+
+const getNotifications = async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT * FROM notifications
+      ORDER BY created_at DESC
+    `);
+
+    const notifications = rows.map((n) => ({
+      ...n,
+      payload: safeJSONParse(n.payload), // ✅ FIX HERE
+    }));
+
+    res.json({
+      success: true,
+      count: notifications.length,
+      data: notifications,
+    });
+
+  } catch (error) {
+    console.error("❌ Fetch notifications error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const markAllNotificationsRead = async (req, res) => {
+  try {
+    await db.query(`
+      UPDATE notifications
+      SET is_read = 1
+      WHERE is_read = 0
+    `);
+
+    res.json({
+      success: true,
+      message: "All notifications marked as read",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getUnreadNotificationsCount = async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT COUNT(*) as count
+      FROM notifications
+      WHERE is_read = 0
+    `);
+
+    res.json({
+      success: true,
+      count: rows[0].count,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+module.exports = { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getUploadStatus, getStudentActivity, deleteUser, getNotifications, markAllNotificationsRead, getUnreadNotificationsCount };
