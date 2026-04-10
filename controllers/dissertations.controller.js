@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const { createNotification } = require("../utils/notification");
+const { getUserFromClerk } = require("../utils/GetUserFromClerk");
 
 // ===============================
 // 📚 GET ALL DISSERTATIONS (FULL DATA)
@@ -227,10 +228,16 @@ const getDissertationById = async (req, res) => {
         supervisor,
         image_url,
         license,
+        year,
         citations,
         campus_id,
         faculty_id,
-        courses_id
+        courses_id, 
+        file_url,
+        file_download_url,
+        file_size,
+        pages,
+        updated_at
       FROM dissertations
       WHERE id = ?`,
       [id]
@@ -377,4 +384,213 @@ const updateDissertation = async (req, res) => {
   }
 };
 
-module.exports = { getAllDissertations, deleteDissertation, getDissertationById, updateDissertation };
+const getDissertationStats = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await db.query(`
+      SELECT 
+        (SELECT COUNT(*) FROM dissertation_views WHERE dissertation_id = ?) AS views,
+        (SELECT COUNT(*) FROM dissertation_downloads WHERE dissertation_id = ?) AS downloads,
+        (SELECT COUNT(*) FROM dissertation_bookmarks WHERE dissertation_id = ?) AS bookmarks
+    `, [id, id, id]);
+
+    return res.json({
+      dissertation_id: Number(id),
+      views: result[0].views,
+      downloads: result[0].downloads,
+      bookmarks: result[0].bookmarks,
+    });
+
+  } catch (error) {
+    console.error("❌ Stats error:", error);
+    return res.status(500).json({
+      message: "Failed to fetch dissertation stats",
+    });
+  }
+};
+
+// ================= VIEW =================
+const trackView = async (req, res) => {
+  try {
+    const { file_id } = req.body;
+    const clerkId = req.auth().userId;
+
+    if (!file_id) {
+      return res.status(400).json({ message: "file_id is required" });
+    }
+
+    // ✅ Check user
+    const user = await getUserFromClerk(clerkId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // ✅ Check dissertation
+    const [dissertation] = await db.query(
+      "SELECT id FROM dissertations WHERE id = ?",
+      [file_id]
+    );
+
+    if (!dissertation.length) {
+      return res.status(404).json({ message: "Dissertation not found" });
+    }
+
+    // 🔥 INSERT OR UPDATE
+    await db.query(
+      `
+      INSERT INTO dissertation_views (user_id, dissertation_id, viewed_at)
+      VALUES (?, ?, NOW())
+      ON DUPLICATE KEY UPDATE viewed_at = NOW()
+      `,
+      [user.id, file_id]
+    );
+
+    await createNotification("system", {
+      action: "info",
+      message: `Dissertation ${file_id} viewed by user ${clerkId}`
+    });
+
+    res.json({ message: "View tracked (unique)" });
+
+  } catch (err) {
+    console.error(err);
+
+    await createNotification("system", {
+      action: "danger",
+      message: "Failed to save view in Database!!!"
+    });
+
+    res.status(500).json({ message: "Error tracking view" });
+  }
+};
+
+// ================= DOWNLOAD =================
+const trackDownload = async (req, res) => {
+  try {
+    const { file_id } = req.body;
+    const clerkId = req.auth().userId;
+
+    const user = await getUserFromClerk(clerkId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const [dissertation] = await db.query(
+      "SELECT id FROM dissertations WHERE id = ?",
+      [file_id]
+    );
+
+    if (!dissertation.length) {
+      return res.status(404).json({ message: "Dissertation not found" });
+    }
+
+    await db.query(`
+      INSERT INTO dissertation_downloads (user_id, dissertation_id)
+      VALUES (?, ?)
+      ON DUPLICATE KEY UPDATE downloaded_at = NOW()
+    `, [user.id, file_id]);
+
+    await createNotification("system", {
+      action: "info",
+      message: `Dissertation ${file_id} downloaded by user ${clerkId}`
+    });
+
+    res.json({ message: "Download tracked" });
+
+  } catch (err) {
+    console.error(err);
+        await createNotification("system", {
+      action: "danger",
+      message: "Failed to save download in Database!!!"
+    });
+    res.status(500).json({ message: "Error tracking download" });
+  }
+};
+
+
+// ================= BOOKMARK (TOGGLE) =================
+const toggleBookmark = async (req, res) => {
+  try {
+    const { file_id } = req.body;
+    const clerkId = req.auth().userId;
+
+    const user = await getUserFromClerk(clerkId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const [dissertation] = await db.query(
+      "SELECT id FROM dissertations WHERE id = ?",
+      [file_id]
+    );
+
+    if (!dissertation.length) {
+      return res.status(404).json({ message: "Dissertation not found" });
+    }
+
+    // 🔥 Check if already bookmarked
+    const [existing] = await db.query(
+      "SELECT id FROM dissertation_bookmarks WHERE user_id = ? AND dissertation_id = ?",
+      [user.id, file_id]
+    );
+
+    if (existing.length) {
+      // ❌ Remove bookmark
+      await createNotification("system", {
+        action: "info",
+        message: `Dissertation ${file_id} was unbookmarked by user ${clerkId}`
+      });
+
+      await db.query(
+        "DELETE FROM dissertation_bookmarks WHERE user_id = ? AND dissertation_id = ?",
+        [user.id, file_id]
+      );
+
+      return res.json({ message: "Bookmark removed successfully", bookmarked: false });
+    }
+
+    // ✅ Add bookmark
+    await db.query(
+      "INSERT INTO dissertation_bookmarks (user_id, dissertation_id) VALUES (?, ?)",
+      [user.id, file_id]
+    );
+
+    await createNotification("system", {
+      action: "info",
+      message: `Dissertation ${file_id} was bookmarked by user ${clerkId}`
+    });
+
+    res.json({ message: "Bookmark Saved Successfully", bookmarked: true });
+
+  } catch (err) {
+    console.error(err);
+    await createNotification("system", {
+      action: "danger",
+      message: `Dissertation ${file_id} failed to be bookmarked by user ${clerkId}`
+    });
+    res.status(500).json({ message: "Error updating bookmark" });
+  }
+};
+
+// ================= GET BOOKMARK STATUS =================
+const getBookmarkStatus = async (req, res) => {
+  try {
+    const { file_id } = req.params;
+    const clerkId = req.auth().userId;
+
+    const user = await getUserFromClerk(clerkId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const [existing] = await db.query(
+      "SELECT id FROM dissertation_bookmarks WHERE user_id = ? AND dissertation_id = ?",
+      [user.id, file_id]
+    );
+
+    res.json({
+      bookmarked: existing.length > 0
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error fetching bookmark status" });
+  }
+};
+
+module.exports = { getAllDissertations, deleteDissertation, getDissertationById, updateDissertation, getDissertationStats, trackView, trackDownload, toggleBookmark, getBookmarkStatus };
