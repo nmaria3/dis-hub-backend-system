@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { updateActivity, getStudentDownloads, getStudentBookmarks } = require("../controllers/students.controller");
+const { updateActivity, getStudentDownloads, getStudentBookmarks, getStudentDashboardAnalytics } = require("../controllers/students.controller");
 const { getAllDissertations, getDissertationById, getDissertationStats, trackView, trackDownload,toggleBookmark, getBookmarkStatus } = require("../controllers/dissertations.controller")
 const { requireAuth } = require("@clerk/express");
 
@@ -23,5 +23,7 @@ router.get("/bookmark/:file_id", requireAuth(), getBookmarkStatus);
 router.get("/downloads", requireAuth(), getStudentDownloads);
 
 router.get("/bookmarks", requireAuth(), getStudentBookmarks);
+
+router.get("/dashboard/analytics", requireAuth(), getStudentDashboardAnalytics);
 
 module.exports = router;
