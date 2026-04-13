@@ -1059,4 +1059,359 @@ const getAdminDashboard = async (req, res) => {
   }
 };
 
-module.exports = { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getUploadStatus, getStudentActivity, deleteUser, getNotifications, markAllNotificationsRead, getUnreadNotificationsCount, getAdminDashboard };
+// const getAdvancedAnalytics = async (req, res) => {
+//   try {
+//     const clerkId = req.auth().userId;
+//     const { startDate, endDate } = req.body;
+
+//     // ===============================
+//     // ✅ VALIDATION
+//     // ===============================
+//     if (!startDate || !endDate) {
+//       return res.status(400).json({ message: "startDate and endDate required" });
+//     }
+
+//     // ===============================
+//     // ✅ VERIFY ADMIN
+//     // ===============================
+//     const [users] = await db.query(
+//       "SELECT id, role FROM users WHERE clerkId = ?",
+//       [clerkId]
+//     );
+
+//     if (!users.length) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     if (users[0].role !== "admin") {
+//       return res.status(403).json({ message: "Access denied" });
+//     }
+
+//     // ===============================
+//     // 1️⃣ ACTIVE USERS (LAST 2 MINUTES)
+//     // ===============================
+//     const [[{ activeUsers }]] = await db.query(`
+//       SELECT COUNT(*) AS activeUsers
+//       FROM activity
+//       WHERE last_seen >= NOW() - INTERVAL 2 MINUTE
+//     `);
+
+//     // ===============================
+//     // 2️⃣ TOTAL DOWNLOADS
+//     // ===============================
+//     const [[{ totalDownloads }]] = await db.query(`
+//       SELECT COUNT(*) AS totalDownloads
+//       FROM dissertation_downloads
+//     `);
+
+//     // ===============================
+//     // 3️⃣ TOTAL REGISTRATIONS (CLERK)
+//     // ===============================
+//     let totalRegistrations = 0;
+//     try {
+//       const clerkUsers = await clerkClient.users.getUserList({ limit: 100 });
+//       totalRegistrations = clerkUsers.length;
+//     } catch (err) {
+//       console.error("Clerk fetch failed:", err);
+//     }
+
+//     // ===============================
+//     // 4️⃣ DOWNLOADS PER DAY (LINE GRAPH)
+//     // ===============================
+//     const [downloadsPerDay] = await db.query(`
+//       SELECT 
+//         DATE(downloaded_at) AS date,
+//         COUNT(*) AS downloads
+//       FROM dissertation_downloads
+//       WHERE downloaded_at BETWEEN ? AND ?
+//       GROUP BY DATE(downloaded_at)
+//       ORDER BY date ASC
+//     `, [startDate, endDate]);
+
+//     // ===============================
+//     // 5️⃣ POPULAR DISSERTATIONS (VIEWS)
+//     // ===============================
+//     const [popularRaw] = await db.query(`
+//       SELECT 
+//         d.id,
+//         d.title,
+//         COUNT(v.id) AS views
+//       FROM dissertation_views v
+//       JOIN dissertations d ON v.dissertation_id = d.id
+//       GROUP BY d.id
+//       ORDER BY views DESC
+//       LIMIT 5
+//     `);
+
+//     const totalViews = popularRaw.reduce((sum, item) => sum + item.views, 0);
+
+//     const popularDissertations = popularRaw.map(item => ({
+//       id: item.id,
+//       title: item.title,
+//       percentage: totalViews
+//         ? ((item.views / totalViews) * 100).toFixed(2)
+//         : 0
+//     }));
+
+//     // ===============================
+//     // 6️⃣ MOST DOWNLOADED + TREND
+//     // ===============================
+//     const [mostDownloadedRaw] = await db.query(`
+//       SELECT 
+//         d.id,
+//         d.title,
+//         d.author_name,
+//         c.name AS course,
+//         COUNT(dd.id) AS total_downloads
+//       FROM dissertation_downloads dd
+//       JOIN dissertations d ON dd.dissertation_id = d.id
+//       LEFT JOIN courses c ON d.courses_id = c.id
+//       GROUP BY d.id
+//       ORDER BY total_downloads DESC
+//       LIMIT 1
+//     `);
+
+//     let mostDownloaded = null;
+
+//     if (mostDownloadedRaw.length) {
+//       const item = mostDownloadedRaw[0];
+
+//       // 📈 trend data (daily downloads for this dissertation)
+//       const [trendData] = await db.query(`
+//         SELECT 
+//           DATE(downloaded_at) AS date,
+//           COUNT(*) AS downloads
+//         FROM dissertation_downloads
+//         WHERE dissertation_id = ?
+//         AND downloaded_at BETWEEN ? AND ?
+//         GROUP BY DATE(downloaded_at)
+//         ORDER BY date ASC
+//       `, [item.id, startDate, endDate]);
+
+//       // determine trend (increase or decrease)
+//       let trend = "neutral";
+//       if (trendData.length >= 2) {
+//         const first = trendData[0].downloads;
+//         const last = trendData[trendData.length - 1].downloads;
+//         trend = last > first ? "increase" : last < first ? "decrease" : "neutral";
+//       }
+
+//       mostDownloaded = {
+//         id: item.id,
+//         title: item.title,
+//         author: item.author_name,
+//         course: item.course,
+//         total_downloads: item.total_downloads,
+//         trend,
+//         trendData
+//       };
+//     }
+
+//     // ===============================
+//     // ✅ RESPONSE
+//     // ===============================
+//     res.json({
+//       range: { startDate, endDate },
+
+//       stats: {
+//         activeUsers,
+//         totalDownloads,
+//         totalRegistrations
+//       },
+
+//       charts: {
+//         downloadsPerDay
+//       },
+
+//       insights: {
+//         popularDissertations,
+//         mostDownloaded
+//       }
+//     });
+
+//   } catch (err) {
+//     console.error("Advanced analytics error:", err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
+
+
+const getAdvancedAnalytics = async (req, res) => {
+  try {
+    const clerkId = req.auth().userId;
+    const { startDate, endDate } = req.body;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: "startDate and endDate required" });
+    }
+
+    // ===============================
+    // ✅ VERIFY ADMIN
+    // ===============================
+    const [users] = await db.query(
+      "SELECT id, role FROM users WHERE clerkId = ?",
+      [clerkId]
+    );
+
+    if (!users.length) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (users[0].role !== "admin") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    // ===============================
+    // 1. 🟢 ACTIVE USERS (last 2 mins)
+    // ===============================
+    const [[{ activeUsers }]] = await db.query(`
+      SELECT COUNT(*) AS activeUsers
+      FROM activity
+      WHERE last_seen >= NOW() - INTERVAL 2 MINUTE
+    `);
+
+    // ===============================
+    // 2. ⬇️ TOTAL DOWNLOADS
+    // ===============================
+    const [[{ totalDownloads }]] = await db.query(`
+      SELECT COUNT(*) AS totalDownloads
+      FROM dissertation_downloads
+      WHERE downloaded_at BETWEEN ? AND ?
+    `, [startDate, endDate]);
+
+    // ===============================
+    // 3. 👨‍🎓 TOTAL REGISTRATIONS (CLERK BASED)
+    // ===============================
+    const [students] = await db.query(`
+      SELECT clerkId FROM users WHERE role = 'student'
+    `);
+
+    let totalRegistrations = 0;
+
+    for (const student of students) {
+      try {
+        const clerkUser = await clerkClient.users.getUser(student.clerkId);
+
+        const createdAt = new Date(clerkUser.createdAt);
+        if (createdAt >= new Date(startDate) && createdAt <= new Date(endDate)) {
+          totalRegistrations++;
+        }
+      } catch (err) {
+        console.error("Clerk fetch failed:", student.clerkId);
+      }
+    }
+
+    // ===============================
+    // 4. 📈 DOWNLOADS PER DAY (LINE GRAPH)
+    // ===============================
+    const [downloadsPerDay] = await db.query(`
+      SELECT 
+        DATE(downloaded_at) as date,
+        COUNT(*) as count
+      FROM dissertation_downloads
+      WHERE downloaded_at BETWEEN ? AND ?
+      GROUP BY DATE(downloaded_at)
+      ORDER BY date ASC
+    `, [startDate, endDate]);
+
+    // ===============================
+    // 5. 🔥 POPULAR DISSERTATIONS (VIEWS)
+    // ===============================
+    const [popularRaw] = await db.query(`
+      SELECT 
+        d.id,
+        d.title,
+        COUNT(v.id) as views
+      FROM dissertation_views v
+      JOIN dissertations d ON v.dissertation_id = d.id
+      WHERE v.viewed_at BETWEEN ? AND ?
+      GROUP BY d.id
+      ORDER BY views DESC
+      LIMIT 5
+    `, [startDate, endDate]);
+
+    const totalViews = popularRaw.reduce((sum, item) => sum + item.views, 0);
+
+    const popularDissertations = popularRaw.map(item => ({
+      id: item.id,
+      title: item.title,
+      percentage: totalViews
+        ? ((item.views / totalViews) * 100).toFixed(2)
+        : 0
+    }));
+
+    // ===============================
+    // 6. 🏆 MOST DOWNLOADED
+    // ===============================
+    const [mostDownloadedRaw] = await db.query(`
+      SELECT 
+        d.id,
+        d.title,
+        d.author_name,
+        c.name as course,
+        COUNT(dd.id) as total_downloads
+      FROM dissertation_downloads dd
+      JOIN dissertations d ON dd.dissertation_id = d.id
+      LEFT JOIN courses c ON d.courses_id = c.id
+      WHERE dd.downloaded_at BETWEEN ? AND ?
+      GROUP BY d.id
+      ORDER BY total_downloads DESC
+      LIMIT 1
+    `, [startDate, endDate]);
+
+    let mostDownloaded = null;
+
+    if (mostDownloadedRaw.length) {
+      const item = mostDownloadedRaw[0];
+
+      // 📊 trend (last 2 days vs previous)
+      const [trend] = await db.query(`
+        SELECT 
+          DATE(downloaded_at) as date,
+          COUNT(*) as count
+        FROM dissertation_downloads
+        WHERE dissertation_id = ?
+        AND downloaded_at >= NOW() - INTERVAL 7 DAY
+        GROUP BY DATE(downloaded_at)
+        ORDER BY date ASC
+      `, [item.id]);
+
+      mostDownloaded = {
+        id: item.id,
+        title: item.title,
+        author: item.author_name,
+        course: item.course,
+        total_downloads: item.total_downloads,
+        trend // frontend decides green/red
+      };
+    }
+
+    // ===============================
+    // ✅ RESPONSE
+    // ===============================
+    res.json({
+      message: "Analytics fetched successfully",
+
+      stats: {
+        activeUsers,
+        totalDownloads,
+        totalRegistrations
+      },
+
+      graphs: {
+        downloadsPerDay
+      },
+
+      insights: {
+        popularDissertations,
+        mostDownloaded
+      }
+    });
+
+  } catch (err) {
+    console.error("Analytics error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+module.exports = { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getUploadStatus, getStudentActivity, deleteUser, getNotifications, markAllNotificationsRead, getUnreadNotificationsCount, getAdminDashboard, getAdvancedAnalytics };
