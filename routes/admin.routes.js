@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { requireAuth } = require("@clerk/express");
-const { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getStudentActivity, deleteUser, getNotifications, markAllNotificationsRead, getUnreadNotificationsCount } = require("../controllers/admin.controller");
+const { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getStudentActivity, deleteUser, getNotifications, markAllNotificationsRead, getUnreadNotificationsCount, getAdminDashboard } = require("../controllers/admin.controller");
 const { getUploadStatus } = require("../controllers/admin.controller")
 const { getAllDissertations, deleteDissertation, getDissertationById, updateDissertation } = require("../controllers/dissertations.controller");
 
@@ -74,5 +74,7 @@ router.get(
   requireAuth(),
   getUnreadNotificationsCount
 );
+
+router.get("/dashboard/analytics", requireAuth(), getAdminDashboard);
 
 module.exports = router;

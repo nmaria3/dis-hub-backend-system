@@ -938,4 +938,125 @@ const getUnreadNotificationsCount = async (req, res) => {
   }
 };
 
-module.exports = { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getUploadStatus, getStudentActivity, deleteUser, getNotifications, markAllNotificationsRead, getUnreadNotificationsCount };
+const getAdminDashboard = async (req, res) => {
+  try {
+    const clerkId = req.auth().userId;
+
+    // 1. ✅ Check user in DB
+    const [users] = await db.query(
+      "SELECT id, role FROM users WHERE clerkId = ?",
+      [clerkId]
+    );
+
+    if (!users.length) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const user = users[0];
+
+    // 2. 🚫 Ensure admin
+    if (user.role !== "admin") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    // ===============================
+    // 📊 COUNTS
+    // ===============================
+
+    // 3. Total dissertations
+    const [[{ totalDissertations }]] = await db.query(
+      "SELECT COUNT(*) AS totalDissertations FROM dissertations"
+    );
+
+    // 4. Total students
+    const [[{ totalStudents }]] = await db.query(
+      "SELECT COUNT(*) AS totalStudents FROM users WHERE role = 'student'"
+    );
+
+    // 5. Total downloads
+    const [[{ totalDownloads }]] = await db.query(
+      "SELECT COUNT(*) AS totalDownloads FROM dissertation_downloads"
+    );
+
+    // ===============================
+    // 📅 LAST 7 DAYS DATA
+    // ===============================
+
+    // 6. Recent dissertations (last 7 days)
+    const [recentDissertations] = await db.query(`
+      SELECT 
+        d.id,
+        d.title,
+        d.author_name,
+        f.name AS faculty,
+        d.updated_at
+      FROM dissertations d
+      LEFT JOIN faculties f ON d.faculty_id = f.id
+      WHERE d.updated_at >= NOW() - INTERVAL 7 DAY
+      ORDER BY d.updated_at DESC
+      LIMIT 5
+    `);
+
+// ================= RECENT STUDENTS (WITH CLERK DATA) =================
+  const [studentsFromDB] = await db.query(`
+    SELECT 
+      clerkId,
+      created_at
+    FROM users
+    WHERE role = 'student'
+    AND created_at >= NOW() - INTERVAL 7 DAY
+    ORDER BY created_at DESC
+    LIMIT 5
+  `);
+
+  const recentStudents = [];
+
+  for (const student of studentsFromDB) {
+    try {
+      const clerkUser = await clerkClient.users.getUser(student.clerkId);
+
+      recentStudents.push({
+        clerkId: student.clerkId,
+        full_name: clerkUser.fullName || `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`.trim(),
+        email: clerkUser.emailAddresses?.[0]?.emailAddress || null,
+        created_at: student.created_at
+      });
+
+    } catch (err) {
+      console.error(`Clerk fetch failed for ${student.clerkId}`, err);
+
+      // fallback if Clerk fails
+      recentStudents.push({
+        clerkId: student.clerkId,
+        full_name: "Unknown",
+        email: null,
+        created_at: student.created_at
+      });
+    }
+  }
+
+    // ===============================
+    // 🎯 RESPONSE
+    // ===============================
+    res.json({
+      message: "Admin dashboard data fetched successfully",
+
+      stats: {
+        totalDissertations,
+        totalStudents,
+        totalDownloads
+      },
+
+      recent: {
+        dissertations: recentDissertations,
+        students: recentStudents
+      }
+    });
+
+  } catch (err) {
+    console.error("Admin dashboard error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+module.exports = { getImages, uploadDissertation, multipleUploadHandler, getUploadedFiles, deleteFile, publishDissertations, getUploadStatus, getStudentActivity, deleteUser, getNotifications, markAllNotificationsRead, getUnreadNotificationsCount, getAdminDashboard };
