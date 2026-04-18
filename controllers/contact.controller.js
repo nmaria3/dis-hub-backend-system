@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const { createNotification } = require("../utils/notification");
 require("dotenv").config();
 
 const sendContactEmail = async (req, res) => {
