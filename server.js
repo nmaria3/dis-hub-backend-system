@@ -6,11 +6,13 @@ const db = require("./config/db");
 const { clerkMiddleware,  clerkClient, requireAuth, getAuth, verifyToken } = require('@clerk/express');
 const loggerMiddleware = require('./middleware/logger.middleware');
 const { sendContactEmail } = require("./controllers/contact.controller");
+const ensureUploadsFolder = require("./utils/CheckForUploadsFolder");
 
 // Routes
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
 const studentRoutes = require("./routes/student.routes");
+const e = require("express");
 
 
 // Middleware
@@ -86,6 +88,9 @@ app.get("/campuses", async (req, res) => {
 });
 
 app.post("/contact/send", sendContactEmail);
+
+// Check and create uploads folder if it doesn't exist
+ensureUploadsFolder();
 
 
 // app.get('/protected', requireAuth({ signInUrl: process.env.CLERK_SIGN_IN_URL , authorizedParties: [process.env.CLERK_FRONTEND_API] }), async (req, res) => {
